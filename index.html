@@ -1,330 +1,274 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Registro de Descriptores Faciales por ID</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        body {
-            font-family: 'Inter', sans-serif;
-            background-image: url('https://i.imgur.com/Z9PMZoP.jpeg');
-            background-size: cover;
-            background-position: center;
-            background-repeat: no-repeat;
-            background-attachment: fixed;
-        }
-        #video-feed {
-            display: block;
-            transform: scaleX(-1);
-        }
-    </style>
-</head>
-<body class="bg-gray-100 flex items-center justify-center min-h-screen">
+import React, { useState, useEffect, useRef } from 'react';
 
-    <div class="bg-white/80 p-8 md:p-12 rounded-2xl shadow-xl max-w-xl w-full text-center">
-        <h1 class="text-4xl font-bold text-[#006400] mb-1">SISCO</h1>
-        <p class="text-[#006400] mb-0 text-lg">(Sistema de Identificación Segura CONALEP)</p>
-        <p class="text-black mb-0 text-lg font-bold">Plantel NAVOLATO 115</p>
-        <p class="text-black mb-6 text-lg font-bold">Registro de Alumnos</p>
+// Se asume que estos modelos están disponibles a través de una CDN
+// o que se cargarán de forma externa.
+// Para esta implementación, se cargarán de la misma manera que en el HTML.
 
-        <div id="login-container" class="transition-all duration-300">
-            <h2 class="text-2xl font-semibold mb-4 text-gray-800">Iniciar Sesión</h2>
-            <input type="text" id="username-input" placeholder="Usuario" class="w-full p-3 mb-4 text-center text-lg rounded-xl border-2 border-gray-300 focus:outline-none focus:border-blue-500 transition-all duration-300">
-            <input type="password" id="password-input" placeholder="Contraseña" class="w-full p-3 mb-4 text-center text-lg rounded-xl border-2 border-gray-300 focus:outline-none focus:border-blue-500 transition-all duration-300">
-            <button id="login-btn" class="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-4 rounded-xl transition-all duration-300">
-                Acceder
-            </button>
-            <div id="login-message-box" class="min-h-[4rem] flex items-center justify-center p-4 rounded-lg font-medium transition-all duration-300 text-sm mt-4">
-                <span class="text-gray-600">Por favor, ingresa tus credenciales.</span>
-            </div>
-        </div>
+const App = () => {
+  // Estado de la aplicación
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [studentId, setStudentId] = useState('');
+  const [studentName, setStudentName] = useState(null);
+  const [message, setMessage] = useState('Por favor, ingresa tus credenciales.');
+  const [messageType, setMessageType] = useState(null);
+  const [showVideo, setShowVideo] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const videoRef = useRef(null);
+  const videoStreamRef = useRef(null);
 
-        <div id="main-app-container" style="display: none;">
-            <div id="id-input-container" class="transition-all duration-300">
-                <input type="text" id="student-id-input" placeholder="Ingresa el ID del alumno" class="w-full p-3 mb-4 text-center text-lg rounded-xl border-2 border-gray-300 focus:outline-none focus:border-blue-500 transition-all duration-300">
-                <button id="submit-id-btn" class="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-4 rounded-xl transition-all duration-300">
-                    Verificar ID
-                </button>
-            </div>
+  // Credenciales y URL
+  const CORRECT_USERNAME = 'ConalepNAVOLATO115*';
+  const CORRECT_PASSWORD = 'Orientacioneducativa115*';
+  const MODELS_URL = 'https://raw.githubusercontent.com/NickMonarrez/aplicacion-asistencia/main/modelos';
+  // ¡¡IMPORTANTE!! Debes reemplazar esta URL con la de tu despliegue de Google Apps Script.
+  const APP_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw_6MMHSnd1lWmuTFBbNSogdJvtgtPD9p5CLRJcCVt2kSKuX6TboS2XUtNMW_E5w0uA/exec';
 
-            <div id="video-container" class="relative w-full aspect-video overflow-hidden rounded-xl shadow-inner mb-6 bg-gray-200 flex items-center justify-center border-4 border-gray-300" style="display: none;">
-                <video id="video-feed" autoplay muted playsinline class="w-full h-full object-cover rounded-xl"></video>
-                <div id="loader" class="absolute text-blue-600 font-semibold text-lg flex flex-col items-center justify-center bg-white bg-opacity-80 p-6 rounded-xl shadow-lg" style="display: none;">
-                    <svg class="animate-spin -ml-1 mr-3 h-8 w-8 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    <span>Cargando...</span>
-                </div>
-            </div>
+  // Efecto para cargar los modelos de IA al iniciar la aplicación
+  useEffect(() => {
+    const loadModels = async () => {
+      try {
+        setLoading(true);
+        setMessage('Cargando modelos de IA...');
+        await faceapi.nets.tinyFaceDetector.loadFromUri(MODELS_URL);
+        await faceapi.nets.faceLandmark68Net.loadFromUri(MODELS_URL);
+        await faceapi.nets.faceRecognitionNet.loadFromUri(MODELS_URL);
+        setLoading(false);
+        setMessage('Modelos de IA cargados. Ingresa tus credenciales.');
+      } catch (e) {
+        console.error("Error loading AI models:", e);
+        setLoading(false);
+        setMessage('Error al cargar modelos de IA. Revisa tu conexión a internet.', 'error');
+      }
+    };
+    loadModels();
+  }, []);
 
-            <div id="message-box" class="min-h-[4rem] flex items-center justify-center p-4 rounded-lg font-medium transition-all duration-300 text-sm mt-4">
-                <span class="text-gray-600">Ingresa un ID para comenzar.</span>
-            </div>
-            
-            <button id="cancel-btn" class="hidden w-full bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-4 rounded-xl transition-all duration-300 mt-4">
-                Cancelar
-            </button>
+  // Función para mostrar mensajes
+  const showMessage = (msg, type) => {
+    setMessage(msg);
+    setMessageType(type);
+  };
 
-            <button id="logout-btn" class="mt-4 w-full bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-4 rounded-xl transition-all duration-300">
-                Cerrar Sesión
-            </button>
-        </div>
+  // Función de inicio de sesión
+  const handleLogin = (username, password) => {
+    if (username === CORRECT_USERNAME && password === CORRECT_PASSWORD) {
+      setIsLoggedIn(true);
+      showMessage('Credenciales correctas. Iniciando aplicación...', 'success');
+      setStudentId('');
+    } else {
+      showMessage('Usuario o contraseña incorrectos.', 'error');
+    }
+  };
 
-        <p class="mt-6 text-xs text-gray-500 text-center">
-            App creada por: Nick Monarrez
-        </p>
+  // Función para verificar el ID del estudiante
+  const verifyId = async () => {
+    if (!studentId) {
+      showMessage('Por favor, ingresa un ID válido.', 'error');
+      return;
+    }
+
+    showMessage('Verificando ID...', 'info');
+    try {
+      const response = await fetch(`${APP_SCRIPT_URL}?studentId=${encodeURIComponent(studentId)}`, {
+        method: 'GET',
+        mode: 'cors',
+      });
+      const data = await response.json();
+
+      if (data && data.name) {
+        setStudentName(data.name);
+        setShowVideo(true);
+        showMessage(`¡Hola, ${data.name}! Por favor, mira a la cámara para registrar tu rostro.`, 'success');
+        startVideo();
+      } else {
+        showMessage('ID de alumno no encontrado. Por favor, verifica el ID e intenta de nuevo.', 'error');
+      }
+    } catch (e) {
+      console.error("Error fetching student name:", e);
+      showMessage(`Error de conexión: ${e.message}.`, 'error');
+    }
+  };
+
+  // Función para iniciar la cámara
+  const startVideo = async () => {
+    try {
+      videoStreamRef.current = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+      videoRef.current.srcObject = videoStreamRef.current;
+      await new Promise((resolve) => videoRef.current.onloadedmetadata = resolve);
+      videoRef.current.play();
+      console.log("Camera started.");
+    } catch (err) {
+      console.error("Error accessing camera:", err);
+      showMessage('No se pudo acceder a la cámara. Concede los permisos.', 'error');
+    }
+  };
+
+  // Función para registrar los descriptores faciales
+  const registerFaceDescriptor = async (descriptor) => {
+    try {
+      const response = await fetch(APP_SCRIPT_URL, {
+        method: 'POST',
+        mode: 'cors',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          studentId: studentId,
+          descriptor: JSON.stringify(Array.from(descriptor)),
+        }),
+      });
+
+      const data = await response.json();
+      if (!data.success) {
+        throw new Error(data.message);
+      }
+      showMessage(`¡Rasgos faciales de ${studentName} registrados con éxito! ✅`, 'success');
+      setTimeout(resetApp, 3000);
+    } catch (e) {
+      console.error("Error registering face descriptor:", e);
+      showMessage(`Error al registrar el rostro: ${e.message}.`, 'error');
+      setTimeout(resetApp, 3000);
+    }
+  };
+
+  // Función para detectar el rostro en el video
+  const detectFace = async () => {
+    if (!videoRef.current || videoRef.current.readyState !== 4) return;
+    try {
+      const detections = await faceapi.detectSingleFace(videoRef.current, new faceapi.TinyFaceDetectorOptions())
+        .withFaceLandmarks()
+        .withFaceDescriptor();
+
+      if (detections && detections.descriptor) {
+        showMessage(`Rostro de ${studentName} detectado. Registrando...`, 'info');
+        await registerFaceDescriptor(detections.descriptor);
+      }
+    } catch (e) {
+      console.error("Error during face detection:", e);
+      showMessage(`Error durante la detección: ${e.message}.`, 'error');
+      setTimeout(resetApp, 3000);
+    }
+  };
+
+  // Efecto para la detección continua de rostros
+  useEffect(() => {
+    let interval;
+    if (showVideo) {
+      interval = setInterval(detectFace, 500);
+    } else {
+      clearInterval(interval);
+    }
+    return () => clearInterval(interval);
+  }, [showVideo]);
+
+  // Función para restablecer la aplicación
+  const resetApp = () => {
+    if (videoStreamRef.current) {
+      videoStreamRef.current.getTracks().forEach(track => track.stop());
+    }
+    setShowVideo(false);
+    setStudentId('');
+    setStudentName(null);
+    showMessage('Ingresa un ID para comenzar.', 'info');
+  };
+
+  const LoginScreen = () => (
+    <div className="transition-all duration-300">
+      <h2 className="text-2xl font-semibold mb-4 text-gray-800">Iniciar Sesión</h2>
+      <input
+        type="text"
+        placeholder="Usuario"
+        className="w-full p-3 mb-4 text-center text-lg rounded-xl border-2 border-gray-300 focus:outline-none focus:border-blue-500 transition-all duration-300"
+        id="username-input"
+      />
+      <input
+        type="password"
+        placeholder="Contraseña"
+        className="w-full p-3 mb-4 text-center text-lg rounded-xl border-2 border-gray-300 focus:outline-none focus:border-blue-500 transition-all duration-300"
+        id="password-input"
+      />
+      <button
+        onClick={() => handleLogin(document.getElementById('username-input').value, document.getElementById('password-input').value)}
+        className="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-4 rounded-xl transition-all duration-300"
+      >
+        Acceder
+      </button>
+      <div className="min-h-[4rem] flex items-center justify-center p-4 rounded-lg font-medium transition-all duration-300 text-sm mt-4">
+        <span>{message}</span>
+      </div>
     </div>
-    
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.1/dist/face-api.min.js"></script>
+  );
 
-    <script>
-        document.addEventListener('DOMContentLoaded', async () => {
-            const video = document.getElementById('video-feed');
-            const messageBox = document.getElementById('message-box');
-            const loader = document.getElementById('loader');
-            const idInputContainer = document.getElementById('id-input-container');
-            const studentIdInput = document.getElementById('student-id-input');
-            const submitIdBtn = document.getElementById('submit-id-btn');
-            const videoContainer = document.getElementById('video-container');
-            const cancelBtn = document.getElementById('cancel-btn');
+  const MainApp = () => (
+    <div className="transition-all duration-300">
+      {!showVideo ? (
+        <div className="id-input-container">
+          <input
+            type="text"
+            placeholder="Ingresa el ID del alumno"
+            value={studentId}
+            onChange={(e) => setStudentId(e.target.value)}
+            className="w-full p-3 mb-4 text-center text-lg rounded-xl border-2 border-gray-300 focus:outline-none focus:border-blue-500 transition-all duration-300"
+          />
+          <button
+            onClick={verifyId}
+            className="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-4 rounded-xl transition-all duration-300"
+          >
+            Verificar ID
+          </button>
+        </div>
+      ) : (
+        <div className="video-container relative w-full aspect-video overflow-hidden rounded-xl shadow-inner mb-6 bg-gray-200 flex items-center justify-center border-4 border-gray-300">
+          <video ref={videoRef} autoPlay muted playsInline className="w-full h-full object-cover rounded-xl"></video>
+        </div>
+      )}
+      
+      <div className={`message-box min-h-[4rem] flex items-center justify-center p-4 rounded-lg font-medium transition-all duration-300 text-sm mt-4 ${messageType === 'success' ? 'bg-green-100 text-green-700 border border-green-200' : messageType === 'error' ? 'bg-red-100 text-red-700 border border-red-200' : 'bg-blue-100 text-blue-700 border border-blue-200'}`}>
+        <span>{message}</span>
+      </div>
 
-            // New login elements
-            const loginContainer = document.getElementById('login-container');
-            const mainAppContainer = document.getElementById('main-app-container');
-            const usernameInput = document.getElementById('username-input');
-            const passwordInput = document.getElementById('password-input');
-            const loginBtn = document.getElementById('login-btn');
-            const loginMessageBox = document.getElementById('login-message-box');
-            
-            // Hardcoded credentials as requested by the user
-            const CORRECT_USERNAME = 'ConalepNAVOLATO115*';
-            const CORRECT_PASSWORD = 'Orientacioneducativa115*';
+      <button
+        onClick={resetApp}
+        className={`w-full bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-4 rounded-xl transition-all duration-300 mt-4 ${showVideo ? 'block' : 'hidden'}`}
+      >
+        Cancelar
+      </button>
 
-            let videoStream = null;
-            let currentStudentId = null;
-            let currentStudentName = null;
-            
-            const MODELS_URL = 'https://raw.githubusercontent.com/NickMonarrez/aplicacion-asistencia/main/modelos';
-            
-            // ¡¡IMPORTANTE!! DEBES REEMPLAZAR ESTA URL CON LA QUE COPIASTE EN EL PASO 1
-            const APP_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw_6MMHSnd1lWmuTFBbNSogdJvtgtPD9p5CLRJcCVt2kSKuX6TboS2XUtNMW_E5w0uA/exec';
+      <button
+        onClick={() => setIsLoggedIn(false)}
+        className="mt-4 w-full bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-4 rounded-xl transition-all duration-300"
+      >
+        Cerrar Sesión
+      </button>
+    </div>
+  );
 
-            const showMessage = (message, type, targetBox) => {
-                const box = targetBox || messageBox;
-                let classes = "min-h-[4rem] flex items-center justify-center p-4 rounded-lg font-medium transition-all duration-300 text-sm";
-                switch (type) {
-                    case 'success':
-                        classes += " bg-green-100 text-green-700 border border-green-200";
-                        break;
-                    case 'error':
-                        classes += " bg-red-100 text-red-700 border border-red-200";
-                        break;
-                    case 'info':
-                        classes += " bg-blue-100 text-blue-700 border border-blue-200";
-                        break;
-                    default:
-                        classes += " bg-gray-200 text-gray-600";
-                        break;
-                }
-                box.className = classes;
-                box.innerHTML = `<span>${message}</span>`;
-            };
+  return (
+    <div className="flex items-center justify-center min-h-screen" style={{ backgroundImage: "url('https://i.imgur.com/Z9PMZoP.jpeg')", backgroundSize: "cover", backgroundPosition: "center", backgroundRepeat: "no-repeat", backgroundAttachment: "fixed" }}>
+      <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
+      <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.1/dist/face-api.min.js"></script>
+      <div className="bg-white/80 p-8 md:p-12 rounded-2xl shadow-xl max-w-xl w-full text-center">
+        <h1 className="text-4xl font-bold text-[#006400] mb-1">SISCO</h1>
+        <p className="text-[#006400] mb-0 text-lg">(Sistema de Identificación Segura CONALEP)</p>
+        <p className="text-black mb-0 text-lg font-bold">Plantel NAVOLATO 115</p>
+        <p className="text-black mb-6 text-lg font-bold">Registro de Alumnos</p>
 
-            const startVideo = async () => {
-                try {
-                    videoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
-                    video.srcObject = videoStream;
-                    await new Promise((resolve) => video.onloadedmetadata = resolve);
-                    video.play();
-                    console.log("Camera started.");
-                    return true;
-                } catch (err) {
-                    console.error("Error accessing camera:", err);
-                    showMessage("No se pudo acceder a la cámara. Por favor, asegúrate de haber concedido los permisos.", "error");
-                    return false;
-                }
-            };
+        {loading ? (
+          <div className="loader flex flex-col items-center justify-center p-6 rounded-xl shadow-lg">
+            <svg className="animate-spin -ml-1 mr-3 h-8 w-8 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <span>{message}</span>
+          </div>
+        ) : (
+          isLoggedIn ? <MainApp /> : <LoginScreen />
+        )}
 
-            const stopVideo = () => {
-                if (videoStream) {
-                    videoStream.getTracks().forEach(track => track.stop());
-                    videoStream = null;
-                    video.srcObject = null;
-                }
-            };
+        <p className="mt-6 text-xs text-gray-500 text-center">App creada por: Nick Monarrez</p>
+      </div>
+    </div>
+  );
+};
 
-            const loadModels = async () => {
-                try {
-                    await faceapi.nets.tinyFaceDetector.loadFromUri(MODELS_URL);
-                    await faceapi.nets.faceLandmark68Net.loadFromUri(MODELS_URL);
-                    await faceapi.nets.faceRecognitionNet.loadFromUri(MODELS_URL);
-                    console.log("AI models loaded successfully.");
-                } catch (e) {
-                    console.error("Error loading AI models:", e);
-                    throw new Error(`Error loading AI models. ${e.message}`);
-                }
-            };
-            
-            const findStudent = async (id) => {
-                try {
-                    const response = await fetch(`${APP_SCRIPT_URL}?studentId=${encodeURIComponent(id)}`, {
-                        method: 'GET',
-                        mode: 'cors', // Agregamos el modo CORS
-                        headers: {
-                            'Content-Type': 'application/json',
-                        }
-                    });
-
-                    if (!response.ok) {
-                        throw new Error(`HTTP error! status: ${response.status}`);
-                    }
-                    const data = await response.json();
-                    if (data && data.name) {
-                        return { name: data.name, id: id };
-                    }
-                    return null;
-                } catch (e) {
-                    console.error("Error fetching student name:", e);
-                    return null;
-                }
-            };
-
-            const registerFaceDescriptor = async (studentId, descriptor) => {
-                try {
-                    const response = await fetch(APP_SCRIPT_URL, {
-                        method: 'POST',
-                        mode: 'cors', // Agregamos el modo CORS
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            studentId: studentId,
-                            descriptor: descriptor
-                        })
-                    });
-
-                    const data = await response.json();
-                    if (!data.success) {
-                        throw new Error(data.message);
-                    }
-                } catch (e) {
-                    console.error("Error registering face descriptor:", e);
-                    throw e;
-                }
-            };
-
-            const detectFace = async () => {
-                if (video.readyState !== 4) return;
-                
-                try {
-                    const detections = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
-                        .withFaceLandmarks()
-                        .withFaceDescriptor();
-
-                    if (detections && detections.descriptor) {
-                        showMessage(`Rostro de ${currentStudentName} detectado. Registrando rasgos faciales...`, "info");
-                        const descriptorArray = Array.from(detections.descriptor);
-                        const descriptorJson = JSON.stringify(descriptorArray);
-                        await registerFaceDescriptor(currentStudentId, descriptorJson);
-                        showMessage(`¡Rasgos faciales de ${currentStudentName} registrados con éxito! ✅`, "success");
-                        setTimeout(() => {
-                            resetApp();
-                        }, 3000);
-                    } else {
-                        // This else block was NOT in the original code, causing the error.
-                        // I'm adding it here for clarity on what was missing.
-                        console.log("No face detected, retrying...");
-                    }
-                } catch (e) {
-                    console.error("Error during face detection:", e);
-                    showMessage(`Error durante la detección: ${e.message}. Intenta de nuevo.`, "error");
-                    setTimeout(() => {
-                        resetApp();
-                    }, 3000);
-                }
-            };
-
-            const startFaceDetection = () => {
-                showMessage(`¡Hola, ${currentStudentName}! Por favor, mira a la cámara para registrar tu rostro.`, "success");
-                setInterval(detectFace, 500);
-            };
-
-            const resetApp = () => {
-                stopVideo();
-                videoContainer.style.display = 'none';
-                cancelBtn.style.display = 'none';
-                idInputContainer.style.display = 'block';
-                studentIdInput.value = '';
-                currentStudentId = null;
-                currentStudentName = null;
-                showMessage("Ingresa un nuevo ID para registrar.", "info");
-            };
-
-            // Event Listeners
-            loginBtn.addEventListener('click', () => {
-                const username = usernameInput.value.trim();
-                const password = passwordInput.value.trim();
-                if (username === CORRECT_USERNAME && password === CORRECT_PASSWORD) {
-                    showMessage("Credenciales correctas. Iniciando aplicación...", "success", loginMessageBox);
-                    loginContainer.style.display = 'none';
-                    mainAppContainer.style.display = 'block';
-                    initializeAppContent();
-                } else {
-                    showMessage("Usuario o contraseña incorrectos.", "error", loginMessageBox);
-                }
-            });
-            
-            submitIdBtn.addEventListener('click', async () => {
-                const id = studentIdInput.value.trim();
-                if (id === '') {
-                    showMessage("Por favor, ingresa un ID válido.", "error");
-                    return;
-                }
-
-                showMessage("Verificando ID...", "info");
-                
-                const foundStudent = await findStudent(id);
-
-                if (foundStudent && foundStudent.name) {
-                    currentStudentId = foundStudent.id;
-                    currentStudentName = foundStudent.name;
-                    idInputContainer.style.display = 'none';
-                    videoContainer.style.display = 'flex';
-                    cancelBtn.style.display = 'block';
-                    const videoStarted = await startVideo();
-                    if (videoStarted) {
-                        startFaceDetection();
-                    }
-                } else {
-                    showMessage("ID de alumno no encontrado. Por favor, verifica el ID e intenta de nuevo.", "error");
-                    currentStudentId = null;
-                }
-            });
-
-            cancelBtn.addEventListener('click', resetApp);
-
-            // Initial app setup
-            showMessage("Por favor, ingresa tus credenciales.", null, loginMessageBox);
-            
-            const initializeAppContent = async () => {
-                loader.style.display = 'flex';
-                showMessage("Cargando modelos de IA...", "info");
-                try {
-                    await loadModels();
-                    loader.style.display = 'none';
-                    showMessage("Modelos de IA cargados. Ingresa el ID del alumno.", "info");
-                    
-                } catch (error) {
-                    console.error("Error starting the application:", error);
-                    loader.style.display = 'none';
-                    showMessage(`Error: ${error.message || error}. Revisa tu conexión a internet o los permisos de la cámara.`, "error");
-                }
-            };
-        });
-    </script>
-</body>
-</html>
-
+export default App;
