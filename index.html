@@ -150,7 +150,8 @@
             let videoStream = null;
             let currentStudentId = null;
             let currentStudentName = null;
-            let detectionTimeout = null;
+            let detectionInterval = null;
+            let isDetecting = false;
             
             const MODELS_URL = 'https://raw.githubusercontent.com/NickMonarrez/aplicacion-asistencia/main/modelos';
             const APP_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbykrg4QN8MWZehjlSWtsdWvP5GMmxsnHlSZuanIq9vCTaD4MorQz25Av-5i_9btYwGO/exec'; // <-- REEMPLAZA ESTO CON TU URL
@@ -217,38 +218,57 @@
 
             // MODIFIED: Uses fetch to communicate with Apps Script
             const getStudentName = async (studentId) => {
-                const response = await fetch(`${APP_SCRIPT_URL}?studentId=${encodeURIComponent(studentId)}`);
-                const data = await response.json();
-                return data.name;
+                try {
+                    const response = await fetch(`${APP_SCRIPT_URL}?studentId=${encodeURIComponent(studentId)}`);
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    const data = await response.json();
+                    return data.name;
+                } catch (e) {
+                    console.error("Error fetching student name:", e);
+                    return null;
+                }
             };
 
             // MODIFIED: Uses fetch to communicate with Apps Script
             const registerFaceDescriptor = async (studentId, descriptor) => {
-                const response = await fetch(APP_SCRIPT_URL, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        studentId: studentId,
-                        descriptor: descriptor
-                    })
-                });
+                try {
+                    const response = await fetch(APP_SCRIPT_URL, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            studentId: studentId,
+                            descriptor: descriptor
+                        })
+                    });
 
-                const data = await response.json();
-                if (!data.success) {
-                    throw new Error(data.message);
+                    const data = await response.json();
+                    if (!data.success) {
+                        throw new Error(data.message);
+                    }
+                } catch (e) {
+                    console.error("Error registering face descriptor:", e);
+                    throw e;
                 }
             };
 
-            const captureFaceAndRegister = async () => {
+            const detectFace = async () => {
+                if (video.readyState !== 4) {
+                    console.log("Video not ready, skipping detection.");
+                    return;
+                }
+                
                 try {
                     const detections = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
                         .withFaceLandmarks()
                         .withFaceDescriptor();
 
                     if (detections && detections.descriptor) {
-                        clearTimeout(detectionTimeout);
+                        clearInterval(detectionInterval);
+                        isDetecting = false;
                         showMessage(`Rostro de ${currentStudentName} detectado. Registrando rasgos faciales...`, "info");
                         
                         const descriptorArray = Array.from(detections.descriptor);
@@ -262,19 +282,31 @@
                             resetApp();
                         }, 3000);
                     } else {
-                        detectionTimeout = setTimeout(captureFaceAndRegister, 100);
+                        showMessage(`Colócate frente a la cámara. No se detecta ningún rostro.`, "info");
                     }
                 } catch (e) {
                     console.error("Error during face detection:", e);
-                    showMessage(`Error: ${e.message}. Intenta de nuevo.`, "error");
+                    showMessage(`Error durante la detección: ${e.message}. Intenta de nuevo.`, "error");
+                    clearInterval(detectionInterval);
+                    isDetecting = false;
                     setTimeout(() => {
                         resetApp();
                     }, 3000);
                 }
             };
 
+            const startFaceDetection = () => {
+                if (isDetecting) return;
+                isDetecting = true;
+                showMessage(`¡Hola, ${currentStudentName}! Por favor, mira a la cámara para registrar tu rostro.`, "success");
+                detectionInterval = setInterval(detectFace, 500); // Check every 500ms
+            };
+
             const resetApp = () => {
-                clearTimeout(detectionTimeout);
+                if (detectionInterval) {
+                    clearInterval(detectionInterval);
+                }
+                isDetecting = false;
                 stopVideo();
                 videoContainer.style.display = 'none';
                 cancelBtn.style.display = 'none';
@@ -301,8 +333,6 @@
                     await loadModels();
                     loader.style.display = 'none';
                     showMessage("Modelos de IA cargados. Ingresa el ID del alumno.", "info");
-                    
-                    await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
                     
                 } catch (error) {
                     console.error("Error starting the application:", error);
@@ -354,13 +384,12 @@
                 if (foundStudent && foundStudent.name) {
                     currentStudentId = foundStudent.id;
                     currentStudentName = foundStudent.name;
-                    showMessage(`ID verificado. ¡Hola, ${currentStudentName}! Por favor, mira a la cámara.`, "success");
                     idInputContainer.style.display = 'none';
                     videoContainer.style.display = 'flex';
                     cancelBtn.style.display = 'block';
                     const videoStarted = await startVideo();
                     if (videoStarted) {
-                        captureFaceAndRegister(); 
+                        startFaceDetection();
                     }
                 } else {
                     showMessage("ID de alumno no encontrado. Por favor, verifica el ID e intenta de nuevo.", "error");
@@ -395,13 +424,4 @@
         });
     </script>
 </body>
-
 </html>
-
-
-
-
-
-
-
-
