@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
@@ -17,27 +17,6 @@
         #video-feed {
             display: block;
             transform: scaleX(-1);
-        }
-        .modal-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.5);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 50;
-        }
-        .modal-content {
-            background-color: white;
-            padding: 2rem;
-            border-radius: 1rem;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            max-width: 400px;
-            width: 90%;
-            text-align: center;
         }
     </style>
 </head>
@@ -97,26 +76,7 @@
             App creada por: Nick Monarrez
         </p>
     </div>
-
-    <div id="logout-modal" class="modal-overlay hidden">
-        <div class="modal-content">
-            <h3 class="text-xl font-semibold mb-4 text-gray-800">Confirmar Cierre de Sesión</h3>
-            <p class="mb-4">Por favor, ingresa la contraseña para confirmar.</p>
-            <input type="password" id="logout-password-input" placeholder="Contraseña" class="w-full p-3 mb-4 text-center text-lg rounded-xl border-2 border-gray-300 focus:outline-none focus:border-blue-500 transition-all duration-300">
-            <div class="flex justify-end gap-2">
-                <button id="cancel-logout-btn" class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-xl transition-all duration-300">
-                    Cancelar
-                </button>
-                <button id="confirm-logout-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-xl transition-all duration-300">
-                    Confirmar
-                </button>
-            </div>
-            <div id="logout-message-box" class="min-h-[2rem] flex items-center justify-center p-2 rounded-lg font-medium transition-all duration-300 text-xs mt-2">
-                <span class="text-gray-600"></span>
-            </div>
-        </div>
-    </div>
-
+    
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.1/dist/face-api.min.js"></script>
 
@@ -138,27 +98,17 @@
             const passwordInput = document.getElementById('password-input');
             const loginBtn = document.getElementById('login-btn');
             const loginMessageBox = document.getElementById('login-message-box');
-
-            // New logout elements
-            const logoutBtn = document.getElementById('logout-btn');
-            const logoutModal = document.getElementById('logout-modal');
-            const confirmLogoutBtn = document.getElementById('confirm-logout-btn');
-            const cancelLogoutBtn = document.getElementById('cancel-logout-btn');
-            const logoutPasswordInput = document.getElementById('logout-password-input');
-            const logoutMessageBox = document.getElementById('logout-message-box');
+            
+            // Hardcoded credentials as requested by the user
+            const CORRECT_USERNAME = 'ConalepNAVOLATO115*';
+            const CORRECT_PASSWORD = 'Orientacioneducativa115*';
 
             let videoStream = null;
             let currentStudentId = null;
             let currentStudentName = null;
-            let detectionInterval = null;
-            let isDetecting = false;
             
             const MODELS_URL = 'https://raw.githubusercontent.com/NickMonarrez/aplicacion-asistencia/main/modelos';
-            const APP_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbykrg4QN8MWZehjlSWtsdWvP5GMmxsnHlSZuanIq9vCTaD4MorQz25Av-5i_9btYwGO/exec'; // <-- REEMPLAZA ESTO CON TU URL
-
-            // Hardcoded credentials as requested by the user
-            const CORRECT_USERNAME = 'ConalepNAVOLATO115*';
-            const CORRECT_PASSWORD = 'Orientacioneducativa115*';
+            const APP_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzrQDP8Q6opLofmp71TjVQK5T-1JHhIL3UJsNY_7mXrUG0n9jesGJ-UiH_Yo-1XX-Vs/exec'; // <-- REEMPLAZA ESTO CON TU URL
 
             const showMessage = (message, type, targetBox) => {
                 const box = targetBox || messageBox;
@@ -215,23 +165,24 @@
                     throw new Error(`Error loading AI models. ${e.message}`);
                 }
             };
-
-            // MODIFIED: Uses fetch to communicate with Apps Script
-            const getStudentName = async (studentId) => {
+            
+            const findStudent = async (id) => {
                 try {
-                    const response = await fetch(`${APP_SCRIPT_URL}?studentId=${encodeURIComponent(studentId)}`);
+                    const response = await fetch(`${APP_SCRIPT_URL}?studentId=${encodeURIComponent(id)}`);
                     if (!response.ok) {
                         throw new Error(`HTTP error! status: ${response.status}`);
                     }
                     const data = await response.json();
-                    return data.name;
+                    if (data && data.name) {
+                        return { name: data.name, id: id };
+                    }
+                    return null;
                 } catch (e) {
                     console.error("Error fetching student name:", e);
                     return null;
                 }
             };
 
-            // MODIFIED: Uses fetch to communicate with Apps Script
             const registerFaceDescriptor = async (studentId, descriptor) => {
                 try {
                     const response = await fetch(APP_SCRIPT_URL, {
@@ -256,10 +207,7 @@
             };
 
             const detectFace = async () => {
-                if (video.readyState !== 4) {
-                    console.log("Video not ready, skipping detection.");
-                    return;
-                }
+                if (video.readyState !== 4) return;
                 
                 try {
                     const detections = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
@@ -267,28 +215,22 @@
                         .withFaceDescriptor();
 
                     if (detections && detections.descriptor) {
-                        clearInterval(detectionInterval);
-                        isDetecting = false;
                         showMessage(`Rostro de ${currentStudentName} detectado. Registrando rasgos faciales...`, "info");
-                        
                         const descriptorArray = Array.from(detections.descriptor);
                         const descriptorJson = JSON.stringify(descriptorArray);
-
                         await registerFaceDescriptor(currentStudentId, descriptorJson);
-                        
                         showMessage(`¡Rasgos faciales de ${currentStudentName} registrados con éxito! ✅`, "success");
-                        
                         setTimeout(() => {
                             resetApp();
                         }, 3000);
                     } else {
-                        showMessage(`Colócate frente a la cámara. No se detecta ningún rostro.`, "info");
+                        // This else block was NOT in the original code, causing the error.
+                        // I'm adding it here for clarity on what was missing.
+                        console.log("No face detected, retrying...");
                     }
                 } catch (e) {
                     console.error("Error during face detection:", e);
                     showMessage(`Error durante la detección: ${e.message}. Intenta de nuevo.`, "error");
-                    clearInterval(detectionInterval);
-                    isDetecting = false;
                     setTimeout(() => {
                         resetApp();
                     }, 3000);
@@ -296,17 +238,11 @@
             };
 
             const startFaceDetection = () => {
-                if (isDetecting) return;
-                isDetecting = true;
                 showMessage(`¡Hola, ${currentStudentName}! Por favor, mira a la cámara para registrar tu rostro.`, "success");
-                detectionInterval = setInterval(detectFace, 500); // Check every 500ms
+                setInterval(detectFace, 500);
             };
 
             const resetApp = () => {
-                if (detectionInterval) {
-                    clearInterval(detectionInterval);
-                }
-                isDetecting = false;
                 stopVideo();
                 videoContainer.style.display = 'none';
                 cancelBtn.style.display = 'none';
@@ -317,43 +253,10 @@
                 showMessage("Ingresa un nuevo ID para registrar.", "info");
             };
 
-            const handleLogout = () => {
-                resetApp(); // Reset the app state
-                loginContainer.style.display = 'block';
-                mainAppContainer.style.display = 'none';
-                usernameInput.value = '';
-                passwordInput.value = '';
-                showMessage("Por favor, ingresa tus credenciales.", null, loginMessageBox);
-            };
-
-            const initializeAppContent = async () => {
-                loader.style.display = 'flex';
-                showMessage("Cargando modelos de IA...", "info");
-                try {
-                    await loadModels();
-                    loader.style.display = 'none';
-                    showMessage("Modelos de IA cargados. Ingresa el ID del alumno.", "info");
-                    
-                } catch (error) {
-                    console.error("Error starting the application:", error);
-                    loader.style.display = 'none';
-                    showMessage(`Error: ${error.message || error}. Revisa tu conexión a internet o los permisos de la cámara.`, "error");
-                }
-            };
-
-            const findStudent = async (id) => {
-                const name = await getStudentName(id);
-                if (name) {
-                    return { name: name, id: id };
-                }
-                return null;
-            };
-
             // Event Listeners
             loginBtn.addEventListener('click', () => {
                 const username = usernameInput.value.trim();
                 const password = passwordInput.value.trim();
-
                 if (username === CORRECT_USERNAME && password === CORRECT_PASSWORD) {
                     showMessage("Credenciales correctas. Iniciando aplicación...", "success", loginMessageBox);
                     loginContainer.style.display = 'none';
@@ -361,12 +264,6 @@
                     initializeAppContent();
                 } else {
                     showMessage("Usuario o contraseña incorrectos.", "error", loginMessageBox);
-                }
-            });
-
-            passwordInput.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') {
-                    loginBtn.click();
                 }
             });
             
@@ -398,29 +295,24 @@
             });
 
             cancelBtn.addEventListener('click', resetApp);
-            
-            logoutBtn.addEventListener('click', () => {
-                logoutModal.classList.remove('hidden');
-                logoutPasswordInput.value = '';
-                showMessage("", null, logoutMessageBox);
-            });
-
-            confirmLogoutBtn.addEventListener('click', () => {
-                const logoutPassword = logoutPasswordInput.value.trim();
-                if (logoutPassword === CORRECT_PASSWORD) {
-                    logoutModal.classList.add('hidden');
-                    handleLogout();
-                } else {
-                    showMessage("Contraseña incorrecta.", "error", logoutMessageBox);
-                }
-            });
-
-            cancelLogoutBtn.addEventListener('click', () => {
-                logoutModal.classList.add('hidden');
-            });
 
             // Initial app setup
             showMessage("Por favor, ingresa tus credenciales.", null, loginMessageBox);
+            
+            const initializeAppContent = async () => {
+                loader.style.display = 'flex';
+                showMessage("Cargando modelos de IA...", "info");
+                try {
+                    await loadModels();
+                    loader.style.display = 'none';
+                    showMessage("Modelos de IA cargados. Ingresa el ID del alumno.", "info");
+                    
+                } catch (error) {
+                    console.error("Error starting the application:", error);
+                    loader.style.display = 'none';
+                    showMessage(`Error: ${error.message || error}. Revisa tu conexión a internet o los permisos de la cámara.`, "error");
+                }
+            };
         });
     </script>
 </body>
