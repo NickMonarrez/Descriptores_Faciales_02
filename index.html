@@ -51,7 +51,6 @@
             transform: translateY(0);
             transition: transform 0.3s ease-in-out;
         }
-
         /* Ocultar el scrollbar en todos los navegadores para una experiencia más limpia en móviles */
         body::-webkit-scrollbar {
             display: none;
@@ -61,14 +60,12 @@
             scrollbar-width: none; /* Firefox */
         }
     </style>
-
     <!--
-        **¡IMPORTANTE!**
+        ¡IMPORTANTE!
         Copia y pega la URL de despliegue de tu proyecto de Apps Script aquí.
         Esta URL permite que tu HTML se comunique con el servidor de Apps Script.
     -->
-    <script src="https://script.google.com/macros/s/AKfycbxr-FQO95LJ40N2yRR7XTlPQCkfMEwYWHUY9nZ11hVPwZgXUmXlE9fFUFlWJW-KKhIG/exec"></script>
-
+    <script src="https://script.google.com/macros/s/AKfycbzCqn4cdMaaVEUqXu9Ez5UA7jXztnOg3TLZZ7MkMBCPcT44ud35w3vTiN09653K5m5W/exec"></script>
 </head>
 <body class="flex items-center justify-center min-h-screen p-4">
 
@@ -166,13 +163,10 @@
         let videoStream = null;
         let currentStudentId = null;
         let currentStudentName = null;
-        let detectionInterval = null;
+        let detectionTimeout = null;
         
         const MODELS_URL = 'https://raw.githubusercontent.com/NickMonarrez/aplicacion-asistencia/main/modelos';
         
-        const CORRECT_USERNAME = 'ConalepNAVOLATO115*';
-        const CORRECT_PASSWORD = 'Orientacioneducativa115*';
-
         // Función para mostrar mensajes de estado con estilos
         const showMessage = (message, type, targetBox) => {
             const box = targetBox || messageBox;
@@ -277,7 +271,8 @@
                     .withFaceDescriptor();
 
                 if (detections && detections.descriptor) {
-                    clearInterval(detectionInterval);
+                    // Si se detecta un rostro, cancela el temporizador de detección
+                    clearTimeout(detectionTimeout);
                     showMessage(`Rostro de ${currentStudentName} detectado. Registrando rasgos faciales...`, "info");
                     
                     const descriptorArray = Array.from(detections.descriptor);
@@ -290,28 +285,23 @@
                     setTimeout(() => {
                         resetApp();
                     }, 3000);
+                } else {
+                    // Si no se detecta, vuelve a intentar después de un breve retraso
+                    detectionTimeout = setTimeout(captureFaceAndRegister, 500);
                 }
             } catch (e) {
                 console.error("Error durante la detección facial:", e);
                 showMessage(`Error: ${e.message}. Intenta de nuevo.`, "error");
-                clearInterval(detectionInterval);
+                clearTimeout(detectionTimeout);
                 setTimeout(() => {
                     resetApp();
                 }, 3000);
             }
         };
         
-        // Iniciar la detección de forma continua
-        const startDetection = () => {
-            if (detectionInterval) {
-                clearInterval(detectionInterval);
-            }
-            detectionInterval = setInterval(captureFaceAndRegister, 1000); // Intenta detectar el rostro cada segundo
-        }
-
         // Restablecer la aplicación a su estado inicial
         const resetApp = () => {
-            clearInterval(detectionInterval);
+            clearTimeout(detectionTimeout);
             stopVideo();
             videoContainer.classList.add('hidden');
             cancelBtn.classList.add('hidden');
@@ -347,12 +337,6 @@
             }
         };
 
-        // Buscar el alumno en la hoja de cálculo
-        const findStudent = async (id) => {
-            const name = await getStudentName(id);
-            return name ? { name: name, id: id } : null;
-        };
-
         // Función principal que se llama al cargar el documento
         function onDocumentLoad() {
             // Asignar los elementos del DOM a las variables
@@ -380,19 +364,39 @@
             logoutMessageBox = document.getElementById('logout-message-box');
 
             // Event Listeners
-            loginBtn.addEventListener('click', () => {
+            loginBtn.addEventListener('click', async () => {
                 const username = usernameInput.value.trim();
                 const password = passwordInput.value.trim();
 
-                if (username === CORRECT_USERNAME && password === CORRECT_PASSWORD) {
-                    showMessage("Credenciales correctas. Iniciando aplicación...", "success", loginMessageBox);
-                    setTimeout(() => {
-                        loginContainer.classList.add('hidden');
-                        mainAppContainer.classList.remove('hidden');
-                        initializeAppContent();
-                    }, 500);
-                } else {
-                    showMessage("Usuario o contraseña incorrectos.", "error", loginMessageBox);
+                if (!username || !password) {
+                    showMessage("Por favor, ingresa ambos campos.", "error", loginMessageBox);
+                    return;
+                }
+
+                showMessage("Verificando credenciales...", "info", loginMessageBox);
+                
+                // Llamada a la nueva función de Apps Script para el login
+                try {
+                    const response = await new Promise((resolve, reject) => {
+                        google.script.run
+                            .withSuccessHandler(resolve)
+                            .withFailureHandler(reject)
+                            .doLogin(username, password);
+                    });
+
+                    if (response.success) {
+                        showMessage("Credenciales correctas. Iniciando aplicación...", "success", loginMessageBox);
+                        setTimeout(() => {
+                            loginContainer.classList.add('hidden');
+                            mainAppContainer.classList.remove('hidden');
+                            initializeAppContent();
+                        }, 500);
+                    } else {
+                        showMessage(response.message, "error", loginMessageBox);
+                    }
+                } catch (error) {
+                    console.error("Error en la llamada al servidor para el login:", error);
+                    showMessage("Error al conectar con el servidor. Intenta de nuevo.", "error", loginMessageBox);
                 }
             });
 
@@ -417,11 +421,11 @@
 
                 showMessage("Verificando ID...", "info");
                 
-                const foundStudent = await findStudent(id);
+                const studentName = await getStudentName(id);
 
-                if (foundStudent) {
-                    currentStudentId = foundStudent.id;
-                    currentStudentName = foundStudent.name;
+                if (studentName) {
+                    currentStudentId = id;
+                    currentStudentName = studentName;
                     showMessage(`ID verificado. ¡Hola, ${currentStudentName}! Por favor, mira a la cámara.`, "success");
                     idInputContainer.classList.add('hidden');
                     videoContainer.classList.remove('hidden');
@@ -429,7 +433,8 @@
                     
                     const videoStarted = await startVideo();
                     if (videoStarted) {
-                        startDetection();
+                        // Inicia la detección de forma asincrónica
+                        captureFaceAndRegister();
                     }
                 } else {
                     showMessage("ID de alumno no encontrado. Por favor, verifica el ID e intenta de nuevo.", "error");
@@ -445,26 +450,46 @@
                 showMessage("", null, logoutMessageBox);
             });
 
-            confirmLogoutBtn.addEventListener('click', () => {
+            confirmLogoutBtn.addEventListener('click', async () => {
                 const logoutPassword = logoutPasswordInput.value.trim();
-                if (logoutPassword === CORRECT_PASSWORD) {
-                    logoutModal.classList.add('hidden');
-                    handleLogout();
-                } else {
-                    showMessage("Contraseña incorrecta.", "error", logoutMessageBox);
+                if (!logoutPassword) {
+                    showMessage("Por favor, ingresa la contraseña.", "error", logoutMessageBox);
+                    return;
+                }
+                
+                showMessage("Verificando contraseña...", "info", logoutMessageBox);
+                
+                // Llama a la nueva función de Apps Script para el logout
+                try {
+                    const response = await new Promise((resolve, reject) => {
+                        google.script.run
+                            .withSuccessHandler(resolve)
+                            .withFailureHandler(reject)
+                            .doLogout(logoutPassword);
+                    });
+                    
+                    if (response.success) {
+                        logoutModal.classList.add('hidden');
+                        handleLogout();
+                    } else {
+                        showMessage(response.message, "error", logoutMessageBox);
+                    }
+                } catch (error) {
+                    console.error("Error en la llamada al servidor para el logout:", error);
+                    showMessage("Error al conectar con el servidor. Intenta de nuevo.", "error", logoutMessageBox);
                 }
             });
 
             cancelLogoutBtn.addEventListener('click', () => {
                 logoutModal.classList.add('hidden');
             });
-
+            
             // Initial app setup
             showMessage("Por favor, ingresa tus credenciales.", null, loginMessageBox);
         }
 
-        // Este evento se dispara cuando la API de Apps Script está lista
-        google.script.history.get.token(onDocumentLoad);
+        // Este evento se dispara cuando el DOM está completamente cargado y parseado
+        document.addEventListener('DOMContentLoaded', onDocumentLoad);
     </script>
 </body>
 </html>
