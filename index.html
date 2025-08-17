@@ -159,221 +159,225 @@
     <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.1/dist/face-api.min.js"></script>
 
     <script>
-        document.addEventListener('DOMContentLoaded', async () => {
-            const video = document.getElementById('video-feed');
-            const messageBox = document.getElementById('message-box');
-            const loader = document.getElementById('loader');
-            const idInputContainer = document.getElementById('id-input-container');
-            const studentIdInput = document.getElementById('student-id-input');
-            const submitIdBtn = document.getElementById('submit-id-btn');
-            const videoContainer = document.getElementById('video-container');
-            const cancelBtn = document.getElementById('cancel-btn');
+        // Declarar las variables globales que usarás en las funciones
+        let video, messageBox, loader, idInputContainer, studentIdInput, submitIdBtn, videoContainer, cancelBtn;
+        let loginContainer, mainAppContainer, usernameInput, passwordInput, loginBtn, loginMessageBox;
+        let logoutBtn, logoutModal, confirmLogoutBtn, cancelLogoutBtn, logoutPasswordInput, logoutMessageBox;
+        let videoStream = null;
+        let currentStudentId = null;
+        let currentStudentName = null;
+        let detectionInterval = null;
+        
+        const MODELS_URL = 'https://raw.githubusercontent.com/NickMonarrez/aplicacion-asistencia/main/modelos';
+        
+        const CORRECT_USERNAME = 'ConalepNAVOLATO115*';
+        const CORRECT_PASSWORD = 'Orientacioneducativa115*';
 
-            const loginContainer = document.getElementById('login-container');
-            const mainAppContainer = document.getElementById('main-app-container');
-            const usernameInput = document.getElementById('username-input');
-            const passwordInput = document.getElementById('password-input');
-            const loginBtn = document.getElementById('login-btn');
-            const loginMessageBox = document.getElementById('login-message-box');
+        // Función para mostrar mensajes de estado con estilos
+        const showMessage = (message, type, targetBox) => {
+            const box = targetBox || messageBox;
+            let classes = "min-h-[3rem] flex items-center justify-center p-2 sm:p-4 rounded-lg font-medium transition-all text-sm";
+            switch (type) {
+                case 'success':
+                    classes += " bg-green-100 text-green-700 border border-green-200";
+                    break;
+                case 'error':
+                    classes += " bg-red-100 text-red-700 border border-red-200";
+                    break;
+                case 'info':
+                    classes += " bg-blue-100 text-blue-700 border border-blue-200";
+                    break;
+                default:
+                    classes += " bg-gray-200 text-gray-600";
+                    break;
+            }
+            box.className = classes;
+            box.innerHTML = `<span>${message}</span>`;
+        };
 
-            const logoutBtn = document.getElementById('logout-btn');
-            const logoutModal = document.getElementById('logout-modal');
-            const confirmLogoutBtn = document.getElementById('confirm-logout-btn');
-            const cancelLogoutBtn = document.getElementById('cancel-logout-btn');
-            const logoutPasswordInput = document.getElementById('logout-password-input');
-            const logoutMessageBox = document.getElementById('logout-message-box');
+        // Iniciar la cámara delantera del dispositivo móvil
+        const startVideo = async () => {
+            try {
+                videoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+                video.srcObject = videoStream;
+                await new Promise((resolve) => video.onloadedmetadata = resolve);
+                video.play();
+                console.log("Cámara iniciada.");
+                return true;
+            } catch (err) {
+                console.error("Error al acceder a la cámara:", err);
+                showMessage("No se pudo acceder a la cámara. Por favor, asegura que has dado permisos.", "error");
+                return false;
+            }
+        };
 
-            let videoStream = null;
-            let currentStudentId = null;
-            let currentStudentName = null;
-            let detectionInterval = null;
-            
-            const MODELS_URL = 'https://raw.githubusercontent.com/NickMonarrez/aplicacion-asistencia/main/modelos';
-            
-            const CORRECT_USERNAME = 'ConalepNAVOLATO115*';
-            const CORRECT_PASSWORD = 'Orientacioneducativa115*';
+        // Detener la cámara y liberar el recurso
+        const stopVideo = () => {
+            if (videoStream) {
+                videoStream.getTracks().forEach(track => track.stop());
+                videoStream = null;
+                video.srcObject = null;
+            }
+        };
 
-            // Función para mostrar mensajes de estado con estilos
-            const showMessage = (message, type, targetBox) => {
-                const box = targetBox || messageBox;
-                let classes = "min-h-[3rem] flex items-center justify-center p-2 sm:p-4 rounded-lg font-medium transition-all text-sm";
-                switch (type) {
-                    case 'success':
-                        classes += " bg-green-100 text-green-700 border border-green-200";
-                        break;
-                    case 'error':
-                        classes += " bg-red-100 text-red-700 border border-red-200";
-                        break;
-                    case 'info':
-                        classes += " bg-blue-100 text-blue-700 border border-blue-200";
-                        break;
-                    default:
-                        classes += " bg-gray-200 text-gray-600";
-                        break;
-                }
-                box.className = classes;
-                box.innerHTML = `<span>${message}</span>`;
-            };
+        // Cargar los modelos de IA para la detección facial
+        const loadModels = async () => {
+            try {
+                await faceapi.nets.tinyFaceDetector.loadFromUri(MODELS_URL);
+                await faceapi.nets.faceLandmark68Net.loadFromUri(MODELS_URL);
+                await faceapi.nets.faceRecognitionNet.loadFromUri(MODELS_URL);
+                console.log("Modelos de IA cargados exitosamente.");
+            } catch (e) {
+                console.error("Error al cargar los modelos de IA:", e);
+                throw new Error(`Error al cargar los modelos de IA. ${e.message}`);
+            }
+        };
 
-            // Iniciar la cámara delantera del dispositivo móvil
-            const startVideo = async () => {
-                try {
-                    videoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
-                    video.srcObject = videoStream;
-                    await new Promise((resolve) => video.onloadedmetadata = resolve);
-                    video.play();
-                    console.log("Cámara iniciada.");
-                    return true;
-                } catch (err) {
-                    console.error("Error al acceder a la cámara:", err);
-                    showMessage("No se pudo acceder a la cámara. Por favor, asegura que has dado permisos.", "error");
-                    return false;
-                }
-            };
+        // Enviar la solicitud a la función de Apps Script para obtener el nombre del alumno
+        const getStudentName = (studentId) => {
+            return new Promise((resolve, reject) => {
+                google.script.run
+                    .withSuccessHandler(name => {
+                        resolve(name);
+                    })
+                    .withFailureHandler(err => {
+                        console.error("Error en la llamada a getStudentName:", err);
+                        resolve(null);
+                    })
+                    .getStudentName(studentId);
+            });
+        };
 
-            // Detener la cámara y liberar el recurso
-            const stopVideo = () => {
-                if (videoStream) {
-                    videoStream.getTracks().forEach(track => track.stop());
-                    videoStream = null;
-                    video.srcObject = null;
-                }
-            };
+        // Enviar la solicitud para registrar el descriptor facial
+        const registerFaceDescriptor = (studentId, descriptor) => {
+            return new Promise((resolve, reject) => {
+                google.script.run
+                    .withSuccessHandler(response => {
+                        console.log("Respuesta del servidor para registrar descriptor:", response);
+                        if (response && response.success) {
+                            resolve();
+                        } else {
+                            reject(response ? response.message : "Error al registrar descriptor.");
+                        }
+                    })
+                    .withFailureHandler(err => {
+                        console.error("Error en la llamada a registerFaceDescriptor:", err);
+                        showMessage("Error al registrar los rasgos faciales. Inténtalo de nuevo.", "error");
+                        reject(err);
+                    })
+                    .registerFaceDescriptor({ studentId: studentId, descriptor: descriptor });
+            });
+        };
 
-            // Cargar los modelos de IA para la detección facial
-            const loadModels = async () => {
-                try {
-                    await faceapi.nets.tinyFaceDetector.loadFromUri(MODELS_URL);
-                    await faceapi.nets.faceLandmark68Net.loadFromUri(MODELS_URL);
-                    await faceapi.nets.faceRecognitionNet.loadFromUri(MODELS_URL);
-                    console.log("Modelos de IA cargados exitosamente.");
-                } catch (e) {
-                    console.error("Error al cargar los modelos de IA:", e);
-                    throw new Error(`Error al cargar los modelos de IA. ${e.message}`);
-                }
-            };
+        // Capturar el rostro y registrar el descriptor
+        const captureFaceAndRegister = async () => {
+            try {
+                const detections = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+                    .withFaceLandmarks()
+                    .withFaceDescriptor();
 
-            // Enviar la solicitud a la función de Apps Script para obtener el nombre del alumno
-            const getStudentName = (studentId) => {
-                return new Promise((resolve, reject) => {
-                    // Llamada al backend de Apps Script
-                    google.script.run
-                        .withSuccessHandler(name => {
-                            resolve(name);
-                        })
-                        .withFailureHandler(err => {
-                            console.error("Error en la llamada a getStudentName:", err);
-                            resolve(null);
-                        })
-                        .getStudentName(studentId);
-                });
-            };
-
-            // Enviar la solicitud para registrar el descriptor facial
-            const registerFaceDescriptor = (studentId, descriptor) => {
-                return new Promise((resolve, reject) => {
-                    // Llamada al backend de Apps Script
-                    google.script.run
-                        .withSuccessHandler(response => {
-                            console.log("Respuesta del servidor para registrar descriptor:", response);
-                            if (response && response.success) {
-                                resolve();
-                            } else {
-                                reject(response ? response.message : "Error al registrar descriptor.");
-                            }
-                        })
-                        .withFailureHandler(err => {
-                            console.error("Error en la llamada a registerFaceDescriptor:", err);
-                            showMessage("Error al registrar los rasgos faciales. Inténtalo de nuevo.", "error");
-                            reject(err);
-                        })
-                        .registerFaceDescriptor({ studentId: studentId, descriptor: descriptor });
-                });
-            };
-
-            // Capturar el rostro y registrar el descriptor
-            const captureFaceAndRegister = async () => {
-                try {
-                    const detections = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
-                        .withFaceLandmarks()
-                        .withFaceDescriptor();
-
-                    if (detections && detections.descriptor) {
-                        clearInterval(detectionInterval);
-                        showMessage(`Rostro de ${currentStudentName} detectado. Registrando rasgos faciales...`, "info");
-                        
-                        const descriptorArray = Array.from(detections.descriptor);
-                        const descriptorJson = JSON.stringify(descriptorArray);
-
-                        await registerFaceDescriptor(currentStudentId, descriptorJson);
-                        
-                        showMessage(`¡Rasgos faciales de ${currentStudentName} registrados con éxito! ✅`, "success");
-                        
-                        setTimeout(() => {
-                            resetApp();
-                        }, 3000);
-                    }
-                } catch (e) {
-                    console.error("Error durante la detección facial:", e);
-                    showMessage(`Error: ${e.message}. Intenta de nuevo.`, "error");
+                if (detections && detections.descriptor) {
                     clearInterval(detectionInterval);
+                    showMessage(`Rostro de ${currentStudentName} detectado. Registrando rasgos faciales...`, "info");
+                    
+                    const descriptorArray = Array.from(detections.descriptor);
+                    const descriptorJson = JSON.stringify(descriptorArray);
+
+                    await registerFaceDescriptor(currentStudentId, descriptorJson);
+                    
+                    showMessage(`¡Rasgos faciales de ${currentStudentName} registrados con éxito! ✅`, "success");
+                    
                     setTimeout(() => {
                         resetApp();
                     }, 3000);
                 }
-            };
-            
-            // Iniciar la detección de forma continua
-            const startDetection = () => {
-                if (detectionInterval) {
-                    clearInterval(detectionInterval);
-                }
-                detectionInterval = setInterval(captureFaceAndRegister, 1000); // Intenta detectar el rostro cada segundo
-            }
-
-            // Restablecer la aplicación a su estado inicial
-            const resetApp = () => {
+            } catch (e) {
+                console.error("Error durante la detección facial:", e);
+                showMessage(`Error: ${e.message}. Intenta de nuevo.`, "error");
                 clearInterval(detectionInterval);
-                stopVideo();
-                videoContainer.classList.add('hidden');
-                cancelBtn.classList.add('hidden');
-                idInputContainer.classList.remove('hidden');
-                studentIdInput.value = '';
-                currentStudentId = null;
-                currentStudentName = null;
-                showMessage("Ingresa un nuevo ID para registrar.", "info");
-            };
+                setTimeout(() => {
+                    resetApp();
+                }, 3000);
+            }
+        };
+        
+        // Iniciar la detección de forma continua
+        const startDetection = () => {
+            if (detectionInterval) {
+                clearInterval(detectionInterval);
+            }
+            detectionInterval = setInterval(captureFaceAndRegister, 1000); // Intenta detectar el rostro cada segundo
+        }
 
-            // Gestionar el cierre de sesión y volver a la pantalla de login
-            const handleLogout = () => {
-                resetApp();
-                loginContainer.classList.remove('hidden');
-                mainAppContainer.classList.add('hidden');
-                usernameInput.value = '';
-                passwordInput.value = '';
-                showMessage("Por favor, ingresa tus credenciales.", null, loginMessageBox);
-            };
+        // Restablecer la aplicación a su estado inicial
+        const resetApp = () => {
+            clearInterval(detectionInterval);
+            stopVideo();
+            videoContainer.classList.add('hidden');
+            cancelBtn.classList.add('hidden');
+            idInputContainer.classList.remove('hidden');
+            studentIdInput.value = '';
+            currentStudentId = null;
+            currentStudentName = null;
+            showMessage("Ingresa un nuevo ID para registrar.", "info");
+        };
 
-            // Inicializar el contenido de la aplicación principal
-            const initializeAppContent = async () => {
-                loader.classList.remove('hidden');
-                showMessage("Cargando modelos de IA...", "info");
-                try {
-                    await loadModels();
-                    loader.classList.add('hidden');
-                    showMessage("Modelos de IA cargados. Ingresa el ID del alumno.", "info");
-                } catch (error) {
-                    console.error("Error al iniciar la aplicación:", error);
-                    loader.classList.add('hidden');
-                    showMessage(`Error: ${error.message || error}. Revisa tu conexión a internet.`, "error");
-                }
-            };
+        // Gestionar el cierre de sesión y volver a la pantalla de login
+        const handleLogout = () => {
+            resetApp();
+            loginContainer.classList.remove('hidden');
+            mainAppContainer.classList.add('hidden');
+            usernameInput.value = '';
+            passwordInput.value = '';
+            showMessage("Por favor, ingresa tus credenciales.", null, loginMessageBox);
+        };
 
-            // Buscar el alumno en la hoja de cálculo
-            const findStudent = async (id) => {
-                const name = await getStudentName(id);
-                return name ? { name: name, id: id } : null;
-            };
+        // Inicializar el contenido de la aplicación principal
+        const initializeAppContent = async () => {
+            loader.classList.remove('hidden');
+            showMessage("Cargando modelos de IA...", "info");
+            try {
+                await loadModels();
+                loader.classList.add('hidden');
+                showMessage("Modelos de IA cargados. Ingresa el ID del alumno.", "info");
+            } catch (error) {
+                console.error("Error al iniciar la aplicación:", error);
+                loader.classList.add('hidden');
+                showMessage(`Error: ${error.message || error}. Revisa tu conexión a internet.`, "error");
+            }
+        };
+
+        // Buscar el alumno en la hoja de cálculo
+        const findStudent = async (id) => {
+            const name = await getStudentName(id);
+            return name ? { name: name, id: id } : null;
+        };
+
+        // Función principal que se llama al cargar el documento
+        function onDocumentLoad() {
+            // Asignar los elementos del DOM a las variables
+            video = document.getElementById('video-feed');
+            messageBox = document.getElementById('message-box');
+            loader = document.getElementById('loader');
+            idInputContainer = document.getElementById('id-input-container');
+            studentIdInput = document.getElementById('student-id-input');
+            submitIdBtn = document.getElementById('submit-id-btn');
+            videoContainer = document.getElementById('video-container');
+            cancelBtn = document.getElementById('cancel-btn');
+
+            loginContainer = document.getElementById('login-container');
+            mainAppContainer = document.getElementById('main-app-container');
+            usernameInput = document.getElementById('username-input');
+            passwordInput = document.getElementById('password-input');
+            loginBtn = document.getElementById('login-btn');
+            loginMessageBox = document.getElementById('login-message-box');
+
+            logoutBtn = document.getElementById('logout-btn');
+            logoutModal = document.getElementById('logout-modal');
+            confirmLogoutBtn = document.getElementById('confirm-logout-btn');
+            cancelLogoutBtn = document.getElementById('cancel-logout-btn');
+            logoutPasswordInput = document.getElementById('logout-password-input');
+            logoutMessageBox = document.getElementById('logout-message-box');
 
             // Event Listeners
             loginBtn.addEventListener('click', () => {
@@ -457,7 +461,10 @@
 
             // Initial app setup
             showMessage("Por favor, ingresa tus credenciales.", null, loginMessageBox);
-        });
+        }
+
+        // Este evento se dispara cuando la API de Apps Script está lista
+        window.addEventListener('load', onDocumentLoad);
     </script>
 </body>
 </html>
