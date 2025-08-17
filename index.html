@@ -42,7 +42,7 @@
         const CONTRASENA_CORRECTA = 'Orientacioneducativa115*';
         const URL_MODELOS = 'https://raw.githubusercontent.com/NickMonarrez/aplicacion-asistencia/main/modelos';
         // ¡¡IMPORTANTE!! Debes reemplazar esta URL con la de tu despliegue de Google Apps Script.
-        const URL_APP_SCRIPT = 'https://script.google.com/macros/s/AKfycbw_6MMHSnd1lWmuTFBbNSogdJvtgtPD9p5CLRJcCVt2kSKuX6TboS2XUtNMW_E5w0uA/exec';
+        const URL_APP_SCRIPT = 'https://script.google.com/macros/s/AKfycbxYUuVq5vP_mZ8TU-3Bal12KJbqkArntHGDdqx0NKK8uxUV-FkdDpLxnRXu4bqwf4fJ/exec';
 
         // Elementos del DOM
         const contenedorApp = document.getElementById('app-container');
@@ -131,20 +131,20 @@
             idAlumno = idIngresado;
             mostrarMensaje('Verificando ID...', 'info');
             try {
-                const respuesta = await fetch(`${URL_APP_SCRIPT}?studentId=${encodeURIComponent(idAlumno)}`);
+                const respuesta = await fetch(`${URL_APP_SCRIPT}?studentId=${encodeURIComponent(idIngresado)}`);
                 const datos = await respuesta.json();
-                if (datos && datos.name) {
-                    nombreAlumno = datos.name;
+                if (datos && datos.success) {
+                    nombreAlumno = datos.name; // Almacena el nombre del alumno
                     mostrarMensaje(`¡Hola, ${nombreAlumno}! Por favor, mira a la cámara para registrar tu rostro.`, 'success');
                     document.getElementById('contenedor-input-id').classList.add('hidden');
                     document.getElementById('contenedor-video').classList.remove('hidden');
                     document.getElementById('boton-cancelar').classList.remove('hidden');
                     iniciarVideo();
                 } else {
-                    mostrarMensaje('ID de alumno no encontrado. Por favor, verifica el ID e intenta de nuevo.', 'error');
+                    mostrarMensaje(datos.message || 'Error al verificar el ID. Intenta de nuevo.', 'error');
                 }
             } catch (e) {
-                console.error("Error al obtener el nombre del alumno:", e);
+                console.error("Error al verificar el ID:", e);
                 mostrarMensaje(`Error de conexión: ${e.message}.`, 'error');
             }
         }
