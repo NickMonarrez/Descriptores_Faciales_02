@@ -67,7 +67,7 @@
         Copia y pega la URL de despliegue de tu proyecto de Apps Script aquí.
         Esta URL permite que tu HTML se comunique con el servidor de Apps Script.
     -->
-    <script src="https://script.google.com/macros/s/AKfycbz_Ky-xQXEydSqr-nmROKUfFRNM6oeQSUNRdVM6c_L4IjPdFp5rkrj6sTuRB2VO8g8/exec"></script>
+    <script src="https://script.google.com/macros/s/AKfycbxr-FQO95LJ40N2yRR7XTlPQCkfMEwYWHUY9nZ11hVPwZgXUmXlE9fFUFlWJW-KKhIG/exec"></script>
 
 </head>
 <body class="flex items-center justify-center min-h-screen p-4">
@@ -280,7 +280,7 @@
                     clearInterval(detectionInterval);
                     showMessage(`Rostro de ${currentStudentName} detectado. Registrando rasgos faciales...`, "info");
                     
-                    const descriptorArray = Array.from(detecciones.descriptor);
+                    const descriptorArray = Array.from(detections.descriptor);
                     const descriptorJson = JSON.stringify(descriptorArray);
 
                     await registerFaceDescriptor(currentStudentId, descriptorJson);
