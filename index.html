@@ -5,6 +5,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SISCO - Registro Facial</title>
+    
+    <!-- Agregamos esta línea para cargar la librería de Google Apps Script. -->
+    <script src="https://apis.google.com/js/api.js"></script>
+
     <!-- Tailwind CSS para un diseño responsivo y moderno -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -154,7 +158,6 @@
     <!-- CDNs para las librerías de IA -->
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.1/dist/face-api.min.js"></script>
-
     <script>
         // Declarar las variables globales que usarás en las funciones
         let video, messageBox, loader, idInputContainer, studentIdInput, submitIdBtn, videoContainer, cancelBtn;
