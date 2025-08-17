@@ -280,7 +280,7 @@
                     clearInterval(detectionInterval);
                     showMessage(`Rostro de ${currentStudentName} detectado. Registrando rasgos faciales...`, "info");
                     
-                    const descriptorArray = Array.from(detections.descriptor);
+                    const descriptorArray = Array.from(detecciones.descriptor);
                     const descriptorJson = JSON.stringify(descriptorArray);
 
                     await registerFaceDescriptor(currentStudentId, descriptorJson);
@@ -464,7 +464,7 @@
         }
 
         // Este evento se dispara cuando la API de Apps Script está lista
-        window.addEventListener('load', onDocumentLoad);
+        google.script.history.get.token(onDocumentLoad);
     </script>
 </body>
 </html>
