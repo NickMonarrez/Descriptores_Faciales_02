@@ -183,6 +183,12 @@
         }
 
         async function registrarDescriptorFacial(descriptor) {
+            // Se asegura de que idAlumno y el descriptor existen antes de continuar.
+            if (!idAlumno || !descriptor) {
+                mostrarMensaje('Datos incompletos para el registro facial.', 'error');
+                return;
+            }
+
             try {
                 const respuesta = await fetch(URL_APP_SCRIPT, {
                     method: 'POST',
@@ -241,5 +247,8 @@
     </script>
 </body>
 </html>
+
+</html>
+
 
 
